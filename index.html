@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>방명록</title>
+  <!-- Pretendard 및 Fira Code 웹 폰트 불러오기 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/fira_code.min.css" />
+  <style>
+    :root { --pretendard:"Pretendard",sans-serif; --firacode:"Fira Code",monospace; --accent-pink:#ed1280; --background:url('background.jpg') center/cover no-repeat; }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{height:100vh;background:var(--background);overflow:hidden;position:relative;font-family:var(--pretendard),var(--firacode);}
+    #countBadge{position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.5);color:#fff;padding:6px 12px;border-radius:12px;font-size:14px;z-index:1000;}
+    #centerArea{position:absolute;top:50%;left:50%;width:450px;height:300px;transform:translate(-50%,-50%);pointer-events:none;}
+    #form{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);width:80%;display:flex;gap:10px;}
+    #nameInput,#messageInput{flex:1;padding:14px;font-size:16px;border:2px solid #fff;border-radius:10px;background:rgba(30,30,30,0.8);color:#e0e0e0;transition:border-color .2s;font-family:var(--pretendard),var(--firacode);}
+    #nameInput:focus,#messageInput:focus{outline:none;border-color:var(--accent-pink);}
+    #submitBtn{padding:14px 20px;font-size:16px;border:none;border-radius:10px;background:var(--accent-pink);color:#fff;cursor:pointer;font-family:var(--pretendard),var(--firacode);}
+    .message{position:absolute;padding:8px 12px;border:1px solid #fff;border-radius:10px;color:#fff;white-space:nowrap;font-family:var(--pretendard),var(--firacode);cursor:pointer;transition:border-color .3s;}
+  </style>
+</head>
+<body>
+  <div id="countBadge">0</div>
+  <div id="centerArea"></div>
+  <div id="form">
+    <input type="text" id="nameInput" placeholder="이름을 입력하세요" />
+    <input type="text" id="messageInput" placeholder="메시지를 입력하고 Enter" />
+    <button id="submitBtn">제출</button>
+  </div>
+  <script>
+    // /clear 엔드포인트 처리
+    if (window.location.pathname === '/clear') {
+      localStorage.removeItem('guestbookMessages');
+      window.location.href = '/';
+    }
+
+    const nameInput = document.getElementById('nameInput');
+    const messageInput = document.getElementById('messageInput');
+    const form = document.getElementById('form');
+    const centerArea = document.getElementById('centerArea');
+    const countBadge = document.getElementById('countBadge');
+    const entries = [];
+    let initialSpawnUsed = false; // 첫 사용자 스폰 여부
+    const maxSpeed = 0.5;
+
+    function clamp(v) { return Math.max(-maxSpeed, Math.min(maxSpeed, v)); }
+    function isColliding(a, b) { return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h); }
+    function updateCount() { countBadge.textContent = entries.length; }
+    function saveStorage() {
+      const data = entries.map(e => ({ name: e.name, text: e.text }));
+      localStorage.setItem('guestbookMessages', JSON.stringify(data));
+    }
+    function reflect(a, nx, ny) {
+      const dot = a.vx * nx + a.vy * ny;
+      const rvx = a.vx - 2 * dot * nx;
+      const rvy = a.vy - 2 * dot * ny;
+      a.vx = clamp(rvx);
+      a.vy = clamp(rvy);
+    }
+
+    function spawnMessage(name, text) {
+      const el = document.createElement('div');
+      el.className = 'message';
+      el.innerHTML = `<strong>${name}</strong>: ${text}`;
+      document.body.appendChild(el);
+      el.addEventListener('dblclick', () => {
+        const idx = entries.findIndex(e => e.el === el);
+        if (idx > -1) { entries.splice(idx, 1); el.remove(); updateCount(); saveStorage(); }
+      });
+      const rect = el.getBoundingClientRect();
+      const formTop = form.getBoundingClientRect().top;
+      const area = centerArea.getBoundingClientRect();
+      let x, y;
+      if (entries.length === 0) {
+        x = window.innerWidth - rect.width - 10;
+        y = formTop - rect.height - 10;
+      } else {
+        let tries = 0;
+        do {
+          x = Math.random() * (window.innerWidth - rect.width);
+          y = Math.random() * (formTop - rect.height);
+          if (++tries > 100) break;
+        } while (
+          isColliding({ x, y, w: rect.width, h: rect.height }, area) ||
+          entries.some(e => isColliding({ x, y, w: rect.width, h: rect.height }, e))
+        );
+      }
+      const vx = (Math.random() - 0.5) * maxSpeed;
+      const vy = (Math.random() - 0.5) * maxSpeed;
+      const entry = { el, name, text, x, y, w: rect.width, h: rect.height, vx, vy };
+      entries.push(entry);
+      if (entries.length > 50) {
+        const removeCount = Math.floor(entries.length / 2);
+        for (let i = 0; i < removeCount; i++) {
+          const old = entries.shift(); old.el.remove();
+        }
+      }
+      updateCount();
+      saveStorage();
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      el.style.borderColor = 'var(--accent-pink)';
+      setTimeout(() => { if (el) el.style.borderColor = '#fff'; }, 2000);
+    }
+
+    function addEntry() {
+      const name = nameInput.value.trim() || '익명';
+      const text = messageInput.value.trim();
+      if (!text) return;
+      if (text.toLowerCase() === 'pandas') {
+        for (let i = 0; i < 10; i++) spawnMessage(name, text);
+      } else {
+        spawnMessage(name, text);
+      }
+      nameInput.value = '';
+      messageInput.value = '';
+      messageInput.focus();
+    }
+
+    function physicsLoop() {
+      const area = centerArea.getBoundingClientRect();
+      const formTop = form.getBoundingClientRect().top;
+      entries.forEach((a, i) => {
+        a.x += a.vx; a.y += a.vy;
+        if (a.x < 0) { a.x = 0; a.vx = Math.abs(a.vx); }
+        else if (a.x + a.w > window.innerWidth) { a.x = window.innerWidth - a.w; a.vx = -Math.abs(a.vx); }
+        if (a.y < 0) { a.y = 0; a.vy = Math.abs(a.vy); }
+        else if (a.y + a.h > formTop) { a.y = formTop - a.h; a.vy = -Math.abs(a.vy); }
+        if (isColliding(a, area)) {
+          let dx = (a.x + a.w/2) - (area.left + area.width/2);
+          let dy = (a.y + a.h/2) - (area.top + area.height/2);
+          const dist = Math.hypot(dx, dy) || 1;
+          dx /= dist; dy /= dist;
+          reflect(a, dx, dy);
+        }
+        for (let j = i+1; j < entries.length; j++) {
+          const b = entries[j];
+          if (isColliding(a, b)) {
+            const vx = a.vx, vy = a.vy;
+            a.vx = b.vx; a.vy = b.vy;
+            b.vx = vx; b.vy = vy;
+            const ox = (a.x + a.w/2) - (b.x + b.w/2);
+            const oy = (a.y + a.h/2) - (b.y + b.h/2);
+            const od = Math.hypot(ox, oy) || 1;
+            const sep = 2;
+            a.x += ox/od * sep; a.y += oy/od * sep;
+            b.x -= ox/od * sep; b.y -= oy/od * sep;
+          }
+        }
+        a.el.style.left = a.x + 'px'; a.el.style.top = a.y + 'px';
+      });
+      requestAnimationFrame(physicsLoop);
+    }
+
+    // 초기 로드: 저장된 메시지 복원
+    const stored = JSON.parse(localStorage.getItem('guestbookMessages') || '[]');
+    stored.forEach(m => spawnMessage(m.name, m.text));
+
+    // 이벤트 바인딩
+    messageInput.addEventListener('keydown', e => { if (e.key === 'Enter') addEntry(); });
+    document.getElementById('submitBtn').addEventListener('click', addEntry);
+
+    physicsLoop();
+  </script>
+</body>
+</html>
