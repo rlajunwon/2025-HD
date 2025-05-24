@@ -37,12 +37,15 @@
       const urlParams = new URLSearchParams(window.location.search);
       const path = window.location.pathname;
       const isAdmin = path === '/admin' || urlParams.has('admin');
+
       if (isAdmin) {
         const data = JSON.parse(localStorage.getItem(ADMIN_KEY) || '[]');
         document.body.innerHTML = '';
         document.body.style.background = '#000';
+
         const controls = document.createElement('div');
         controls.className = 'admin-controls';
+
         const downloadBtn = document.createElement('button');
         downloadBtn.textContent = '텍스트로 저장';
         downloadBtn.className = 'download-btn';
@@ -50,81 +53,95 @@
           const text = data.map(d => `${d.name}: ${d.text} (${new Date(d.time).toLocaleString('ko-KR')})`).join('\n');
           const blob = new Blob([text], { type: 'text/plain' });
           const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'guestbook.txt';
-          a.click();
-          URL.revokeObjectURL(url);
+          const a = document.createElement('a'); a.href = url; a.download = 'guestbook.txt'; a.click(); URL.revokeObjectURL(url);
         });
+
         const resetBtn = document.createElement('button');
         resetBtn.textContent = '내용 초기화';
         resetBtn.className = 'reset-btn';
         resetBtn.addEventListener('click', () => {
           localStorage.removeItem(GUESTBOOK_KEY);
+          localStorage.removeItem(ADMIN_KEY);
           location.reload();
         });
+
         controls.appendChild(downloadBtn);
         controls.appendChild(resetBtn);
         document.body.appendChild(controls);
+
         const table = document.createElement('table');
         table.style.cssText = 'border-collapse:collapse;width:80%;margin:20px auto;color:#fff;';
+
         const header = table.insertRow();
         ['이름','메시지','시간'].forEach(txt => {
-          const th = document.createElement('th');
-          th.textContent = txt;
+          const th = document.createElement('th'); th.textContent = txt;
           th.style.cssText = 'border:1px solid #fff;padding:8px;background:#333;';
           header.appendChild(th);
         });
-        data.forEach(item => {
+
+        data.forEach((item, index) => {
           const row = table.insertRow();
+          row.addEventListener('dblclick', () => {
+            data.splice(index, 1);
+            localStorage.setItem(ADMIN_KEY, JSON.stringify(data));
+            row.remove();
+          });
+
           const nameCell = row.insertCell(); nameCell.textContent = item.name; nameCell.style.cssText = 'border:1px solid #fff;padding:8px;';
           const textCell = row.insertCell(); textCell.textContent = item.text; textCell.style.cssText = 'border:1px solid #fff;padding:8px;';
           const timeCell = row.insertCell(); timeCell.textContent = new Date(item.time).toLocaleString('ko-KR'); timeCell.style.cssText = 'border:1px solid #fff;padding:8px;';
         });
+
         document.body.appendChild(table);
         return;
       }
+
+      // 일반 사용자 방명록 로직
       if (path === '/clear' || urlParams.has('clear')) {
         localStorage.removeItem(GUESTBOOK_KEY);
-        if (urlParams.has('clear')) {
-          urlParams.delete('clear');
-          const newUrl = window.location.origin + path + (urlParams.toString() ? '?' + urlParams.toString() : '');
-          window.history.replaceState(null, '', newUrl);
-        }
-        window.location.reload();
-        return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('clear')) { params.delete('clear'); window.history.replaceState(null, '', `${path}${params.toString() ? '?' + params.toString() : ''}`); }
+        return location.reload();
       }
+
       const nameInput = document.getElementById('nameInput');
       const messageInput = document.getElementById('messageInput');
       const form = document.getElementById('form');
       const centerArea = document.getElementById('centerArea');
       const countBadge = document.getElementById('countBadge');
+
       const entries = [];
       const maxSpeed = 0.5;
+
       function clamp(v) { return Math.max(-maxSpeed, Math.min(maxSpeed, v)); }
       function isColliding(a, b) { return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h); }
       function updateCount() { countBadge.textContent = entries.length; }
+
       function saveStorage() {
         const data = entries.map(e => ({ name: e.name, text: e.text, time: e.time }));
         localStorage.setItem(GUESTBOOK_KEY, JSON.stringify(data));
       }
+
       function reflect(a, nx, ny) {
         const dot = a.vx * nx + a.vy * ny;
         a.vx = clamp(a.vx - 2 * dot * nx);
         a.vy = clamp(a.vy - 2 * dot * ny);
       }
+
       function spawnMessage(name, text, time) {
-        const el = document.createElement('div');
-        el.className = 'message';
+        const el = document.createElement('div'); el.className = 'message';
         el.innerHTML = `<strong>${name}</strong>: ${text}`;
         document.body.appendChild(el);
+
         el.addEventListener('dblclick', () => {
           const idx = entries.findIndex(e => e.el === el);
           if (idx > -1) { entries.splice(idx, 1); el.remove(); updateCount(); saveStorage(); }
         });
+
         const rect = el.getBoundingClientRect();
         const formTop = form.getBoundingClientRect().top;
         let x, y;
+
         if (entries.length === 0) {
           x = window.innerWidth - rect.width - 10;
           y = formTop - rect.height - 10;
@@ -134,28 +151,32 @@
             x = Math.random() * (window.innerWidth - rect.width);
             y = Math.random() * (formTop - rect.height);
             if (++tries > 100) break;
-          } while (isColliding({ x, y, w: rect.width, h: rect.height }, centerArea.getBoundingClientRect()) ||
-                   entries.some(e => isColliding({ x, y, w: rect.width, h: rect.height }, e)));
+          } while (isColliding({ x,y,w:rect.width,h:rect.height }, centerArea.getBoundingClientRect()) ||
+                   entries.some(e => isColliding({ x,y,w:rect.width,h:rect.height }, e)));
         }
+
         const vx = (Math.random() - 0.5) * maxSpeed;
         const vy = (Math.random() - 0.5) * maxSpeed;
-        const entry = { el, name, text, x, y, w: rect.width, h: rect.height, vx, vy, time: time || new Date().toISOString() };
+        const entry = { el, name, text, x, y, w:rect.width, h:rect.height, vx, vy, time: time || new Date().toISOString() };
+
         entries.push(entry);
         if (entries.length > 50) {
-          const removeCount = Math.floor(entries.length / 2);
-          for (let i = 0; i < removeCount; i++) { const old = entries.shift(); old.el.remove(); }
+          const removeCount = Math.floor(entries.length/2);
+          for (let i=0; i<removeCount; i++) { const old = entries.shift(); old.el.remove(); }
         }
-        updateCount();
-        saveStorage();
-        // Persist new messages to admin DB only when adding (time not provided)
+
+        updateCount(); saveStorage();
+
         if (!time) {
           const adminData = JSON.parse(localStorage.getItem(ADMIN_KEY) || '[]');
           adminData.push({ name, text, time: entry.time });
           localStorage.setItem(ADMIN_KEY, JSON.stringify(adminData));
         }
+
         el.style.left = entry.x + 'px'; el.style.top = entry.y + 'px'; el.style.borderColor = 'var(--accent-pink)';
         setTimeout(() => { if (el) el.style.borderColor = '#fff'; }, 2000);
       }
+
       function addEntry() {
         const name = nameInput.value.trim() || '익명';
         const text = messageInput.value.trim();
@@ -167,41 +188,44 @@
         }
         nameInput.value = ''; messageInput.value = ''; messageInput.focus();
       }
+
       function physicsLoop() {
         const formTop = form.getBoundingClientRect().top;
-        entries.forEach((a, i) => {
+        entries.forEach((a,i) => {
           a.x += a.vx; a.y += a.vy;
           if (a.x < 0) { a.x = 0; a.vx = Math.abs(a.vx); }
           else if (a.x + a.w > window.innerWidth) { a.x = window.innerWidth - a.w; a.vx = -Math.abs(a.vx); }
           if (a.y < 0) { a.y = 0; a.vy = Math.abs(a.vy); }
           else if (a.y + a.h > formTop) { a.y = formTop - a.h; a.vy = -Math.abs(a.vy); }
+
           if (isColliding(a, centerArea.getBoundingClientRect())) {
             const ca = centerArea.getBoundingClientRect();
             let dx = (a.x + a.w/2) - (ca.left + ca.width/2);
             let dy = (a.y + a.h/2) - (ca.top + ca.height/2);
-            const dist = Math.hypot(dx, dy) || 1;
+            const dist = Math.hypot(dx,dy) || 1;
             reflect(a, dx/dist, dy/dist);
           }
-          for (let j = i + 1; j < entries.length; j++) {
+
+          for (let j=i+1; j<entries.length; j++) {
             const b = entries[j];
-            if (isColliding(a, b)) {
-              [a.vx, b.vx] = [b.vx, a.vx];
-              [a.vy, b.vy] = [b.vy, a.vy];
-              const ox = (a.x + a.w/2) - (b.x + b.w/2);
-              const oy = (a.y + a.h/2) - (b.y + b.h/2);
-              const od = Math.hypot(ox, oy) || 1;
-              const sep = 2;
-              a.x += (ox/od) * sep; a.y += (oy/od) * sep;
-              b.x -= (ox/od) * sep; b.y -= (oy/od) * sep;
+            if (isColliding(a,b)) {
+              [a.vx,b.vx] = [b.vx,a.vx]; [a.vy,b.vy] = [b.vy,a.vy];
+              const ox = (a.x+a.w/2) - (b.x+b.w/2);
+              const oy = (a.y+a.h/2) - (b.y+b.h/2);
+              const od = Math.hypot(ox,oy) || 1; const sep=2;
+              a.x += (ox/od)*sep; a.y += (oy/od)*sep;
+              b.x -= (ox/od)*sep; b.y -= (oy/od)*sep;
             }
           }
-          a.el.style.left = a.x + 'px'; a.el.style.top = a.y + 'px';
+          a.el.style.left = a.x+'px'; a.el.style.top = a.y+'px';
         });
         requestAnimationFrame(physicsLoop);
       }
+
       const stored = JSON.parse(localStorage.getItem(GUESTBOOK_KEY) || '[]');
       stored.forEach(m => spawnMessage(m.name, m.text, m.time));
-      messageInput.addEventListener('keydown', e => { if (e.key === 'Enter') addEntry(); });
+
+      messageInput.addEventListener('keydown', e => { if (e.key==='Enter') addEntry(); });
       document.getElementById('submitBtn').addEventListener('click', addEntry);
       physicsLoop();
     })();
