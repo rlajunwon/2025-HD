@@ -32,11 +32,13 @@
   </div>
   <script>
     (function() {
+      const GUESTBOOK_KEY = 'guestbookMessages';
+      const ADMIN_KEY = 'guestbookAdminMessages';
       const urlParams = new URLSearchParams(window.location.search);
       const path = window.location.pathname;
       const isAdmin = path === '/admin' || urlParams.has('admin');
       if (isAdmin) {
-        const data = JSON.parse(localStorage.getItem('guestbookMessages') || '[]');
+        const data = JSON.parse(localStorage.getItem(ADMIN_KEY) || '[]');
         document.body.innerHTML = '';
         document.body.style.background = '#000';
         const controls = document.createElement('div');
@@ -58,7 +60,7 @@
         resetBtn.textContent = '내용 초기화';
         resetBtn.className = 'reset-btn';
         resetBtn.addEventListener('click', () => {
-          localStorage.removeItem('guestbookMessages');
+          localStorage.removeItem(GUESTBOOK_KEY);
           location.reload();
         });
         controls.appendChild(downloadBtn);
@@ -75,21 +77,15 @@
         });
         data.forEach(item => {
           const row = table.insertRow();
-          const nameCell = row.insertCell();
-          nameCell.textContent = item.name;
-          nameCell.style.cssText = 'border:1px solid #fff;padding:8px;';
-          const textCell = row.insertCell();
-          textCell.textContent = item.text;
-          textCell.style.cssText = 'border:1px solid #fff;padding:8px;';
-          const timeCell = row.insertCell();
-          timeCell.textContent = new Date(item.time).toLocaleString('ko-KR');
-          timeCell.style.cssText = 'border:1px solid #fff;padding:8px;';
+          const nameCell = row.insertCell(); nameCell.textContent = item.name; nameCell.style.cssText = 'border:1px solid #fff;padding:8px;';
+          const textCell = row.insertCell(); textCell.textContent = item.text; textCell.style.cssText = 'border:1px solid #fff;padding:8px;';
+          const timeCell = row.insertCell(); timeCell.textContent = new Date(item.time).toLocaleString('ko-KR'); timeCell.style.cssText = 'border:1px solid #fff;padding:8px;';
         });
         document.body.appendChild(table);
         return;
       }
       if (path === '/clear' || urlParams.has('clear')) {
-        localStorage.removeItem('guestbookMessages');
+        localStorage.removeItem(GUESTBOOK_KEY);
         if (urlParams.has('clear')) {
           urlParams.delete('clear');
           const newUrl = window.location.origin + path + (urlParams.toString() ? '?' + urlParams.toString() : '');
@@ -110,7 +106,7 @@
       function updateCount() { countBadge.textContent = entries.length; }
       function saveStorage() {
         const data = entries.map(e => ({ name: e.name, text: e.text, time: e.time }));
-        localStorage.setItem('guestbookMessages', JSON.stringify(data));
+        localStorage.setItem(GUESTBOOK_KEY, JSON.stringify(data));
       }
       function reflect(a, nx, ny) {
         const dot = a.vx * nx + a.vy * ny;
@@ -151,7 +147,13 @@
         }
         updateCount();
         saveStorage();
-        el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.borderColor = 'var(--accent-pink)';
+        // Persist new messages to admin DB only when adding (time not provided)
+        if (!time) {
+          const adminData = JSON.parse(localStorage.getItem(ADMIN_KEY) || '[]');
+          adminData.push({ name, text, time: entry.time });
+          localStorage.setItem(ADMIN_KEY, JSON.stringify(adminData));
+        }
+        el.style.left = entry.x + 'px'; el.style.top = entry.y + 'px'; el.style.borderColor = 'var(--accent-pink)';
         setTimeout(() => { if (el) el.style.borderColor = '#fff'; }, 2000);
       }
       function addEntry() {
@@ -197,7 +199,7 @@
         });
         requestAnimationFrame(physicsLoop);
       }
-      const stored = JSON.parse(localStorage.getItem('guestbookMessages') || '[]');
+      const stored = JSON.parse(localStorage.getItem(GUESTBOOK_KEY) || '[]');
       stored.forEach(m => spawnMessage(m.name, m.text, m.time));
       messageInput.addEventListener('keydown', e => { if (e.key === 'Enter') addEntry(); });
       document.getElementById('submitBtn').addEventListener('click', addEntry);
